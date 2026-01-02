@@ -92,15 +92,7 @@ func getPlayerFromOEmbed(doc *html.Node) *Player {
 	}
 
 	// OEmbedのiframeが要求する権限のうち安全なものを許可する
-	var allowed []string
-	safePermissions := []string{"autoplay", "clipboard-write", "picture-in-picture", "web-share", "fullscreen"}
-	for _, rp := range getRequiredPermissionsFromIframe(embed.Html) {
-		for _, sp := range safePermissions {
-			if rp == sp {
-				allowed = append(allowed, rp)
-			}
-		}
-	}
+	allowed := filterSafeIframePermissions(embed.Html)
 
 	return &Player{
 		Url:               getPlayerUrl(doc),
@@ -298,6 +290,17 @@ func Summarize(siteUrl string) (*Summary, error) {
 		return nil, errors.New("failed to parse url")
 	}
 
+	var redditErr error
+	if isRedditHost(parsedUrl.Hostname()) {
+		redditSummary, err := summarizeReddit(*parsedUrl)
+		if err == nil && redditSummary != nil {
+			return redditSummary, nil
+		}
+		if err != nil && !errors.Is(err, errRedditUnsupported) {
+			redditErr = err
+		}
+	}
+
 	req, newReqErr := http.NewRequest("GET", siteUrl, nil)
 	if newReqErr != nil {
 		return nil, errors.New("failed to create request")
@@ -322,8 +325,14 @@ func Summarize(siteUrl string) (*Summary, error) {
 	resp, respErr := requester.Send()
 
 	if respErr != nil {
+		if redditErr != nil {
+			return nil, fmt.Errorf("reddit parser failed: %w; html request failed: %v", redditErr, respErr)
+		}
 		return nil, respErr
 	} else if resp.StatusCode != 200 {
+		if redditErr != nil {
+			return nil, fmt.Errorf("reddit parser failed: %w; html request failed: %s", redditErr, resp.Status)
+		}
 		return nil, errors.New("non-200 status code: " + resp.Status)
 	}
 

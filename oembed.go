@@ -34,3 +34,16 @@ func getRequiredPermissionsFromIframe(iframe string) []string {
 
 	return allowList
 }
+
+func filterSafeIframePermissions(iframe string) []string {
+	var allowed []string
+	safePermissions := []string{"autoplay", "clipboard-write", "picture-in-picture", "web-share", "fullscreen"}
+	for _, rp := range getRequiredPermissionsFromIframe(iframe) {
+		for _, sp := range safePermissions {
+			if rp == sp {
+				allowed = append(allowed, rp)
+			}
+		}
+	}
+	return allowed
+}
